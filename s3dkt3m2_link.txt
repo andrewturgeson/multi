@@ -1,0 +1,3 @@
+https://math.nist.gov/MatrixMarket/data/misc/cylshell/s3dkt3m2.html
+
+saved as s3dktm2.mtx

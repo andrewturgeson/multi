@@ -1,0 +1,102 @@
+//Matrix Frobenius Norm Kokkos - Andy Turgeson
+#include <Kokkos_Core.hpp>
+#include <cstdio>
+#include <typeinfo>
+#include <iostream>
+#include <cstdio>
+#include <fstream>
+#include <algorithm>
+#include <cmath>
+
+
+
+using view_type = Kokkos::View<double**>;
+using host_view_type = view_type::HostMirror;
+		using ExecSpace = Kokkos::Cuda;
+		using MemSpace = Kokkos::CudaUVMSpace;
+		using Layout = Kokkos::LayoutRight;
+		using range_policy = Kokkos::RangePolicy<ExecSpace>;
+	//	using view_type = Kokkos::View<double**>;
+
+//template <class ViewType>
+struct ReduceFunctor {
+	view_type matrix;
+	//ReduceFunctor(view_type matrix_, const size_t Nsize_) : matrix(matrix_), Nsize(Nsize_) {}
+	ReduceFunctor(view_type matrix_) : matrix(matrix_) {}
+	using value_type = double;  // Specify type for reduction value, lsum
+
+ 	/*KOKKOS_INLINE_FUNCTION
+  	void operator()(int i, double &lsum) const {
+    	for (int k = 0; k < N; k++) {
+			lsum += matrix(i,k)*matrix(i,k);
+		}	
+  	}
+	*/
+
+	KOKKOS_INLINE_FUNCTION
+  	void operator()(int i, double &lsum) const {
+    		for (int j = 0; j < matrix.extent(1); j++) {
+				lsum += matrix(i,j)*matrix(i,j);
+			}
+		}	
+  	}
+};
+
+int main(int argc, char* argv[]) {
+	int count = 0;
+	cudaGetDeviceCount(&count);	
+	Kokkos::initialize(argc, argv);
+	{
+        	
+		
+		
+		{
+
+			std::ifstream fin("matrix.mtx");
+
+	        	 
+				int M, N, L;
+
+        		while (fin.peek() == '%') fin.ignore(2048, '\n');
+
+      	 		fin >> M >> N >> L;
+        		std::cout << M << " " << N << " " << L << std::endl;
+      
+			const int size = M;
+			view_type matrix("matrix", size); 
+			
+			//maybe make a matrix...i
+			//ViewMatrixType matrix("matrix", N, M);
+			view_type::HostMirror host_matrix = Kokkos::create_mirror_view( matrix );
+			
+        		double sum = 0.0;
+
+			for (int i = 0; i < L; i++) {
+				int m, n;
+				double data;
+				fin >> m >> n >> data;
+				//host_matrix((m-1) + (n-1)*M) = data;
+				host_matrix(m,n) = data;
+				sum += data*data;
+			}
+			
+
+			Kokkos::deep_copy( matrix, host_matrix);			
+	        	std::cout << "size: " << size << std::endl;
+			std::cout << "nonparallel: " << sqrt(sum) << std::endl;
+
+			sum = 0.0;
+		
+			Kokkos::parallel_reduce("reduction", size, ReduceFunctor(matrix), sum);
+
+	        	std::cout << "parallel frobenius norm from array is: " << sqrt(sum) << std::endl;
+			Kokkos::fence();
+			fin.close();
+		}
+	}
+
+	Kokkos::finalize();
+	return 0;
+}
+
+
